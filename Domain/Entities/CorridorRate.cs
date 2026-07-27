@@ -80,7 +80,18 @@ public class CorridorRate
 
 
 
+  public void Approve(string approvedBy, string reason)
+    {
+        if (ApprovalStatus != RateApprovalStatus.PendingApproval)
+            throw new InvalidOperationException($"Cannot approve a rate in status {ApprovalStatus}.");
+        if (approvedBy.Equals(SubmittedBy, StringComparison.OrdinalIgnoreCase))
+            throw new MakerCheckerViolationException();
 
+        ApprovalStatus = RateApprovalStatus.Approved;
+        ApprovedBy = approvedBy;
+        ApprovalReason = reason;
+        ApprovedAt = DateTime.UtcNow;
+    }
       public void Reject(string rejectedBy, string reason)
     {
         if (ApprovalStatus != RateApprovalStatus.PendingApproval)

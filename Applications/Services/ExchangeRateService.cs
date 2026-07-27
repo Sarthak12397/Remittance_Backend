@@ -20,16 +20,18 @@ public class ExtensionService
 
     }
 public async Task<Guid> SubmitRateSheetAsync(
-    string corridorCode,
-    string request, 
-    decimal baseRate,
-    decimal treasurySpread,
-    decimal partnerSpread,
-    decimal promotionalAdjustment,
-    DateTime effectiveFrom,
-    string submittedBy,
-    string sourceIp,
-    CancellationToken  ct)
+  string   corridorCode,
+        decimal  baseRate,
+        decimal  treasurySpread,
+        decimal  partnerSpread,
+        decimal  promotionalAdjustment,
+        decimal  settlementRate,
+        int      rateLockMinutes,
+        DateTime effectiveFrom,
+        string   submittedBy,
+        string   sourceIp,
+        string   rateSource,
+        CancellationToken ct = default)
 {
     // Step 1: Fetch corridor
     var corridor = await _corridorRepository.GetByCodeAsync(corridorCode, ct);
@@ -58,6 +60,72 @@ public async Task<Guid> SubmitRateSheetAsync(
                 throw new RateVarianceThresholdException(variance, VarianceThresholdPercent);
         }
 
+
+           var newRate = new CorridorRate(
+            corridor.Id,
+            corridorCode,
+            baseRate,
+            treasurySpread,
+            partnerSpread,
+            promotionalAdjustment,
+            settlementRate,
+            rateLockMinutes,
+            effectiveFrom,
+            submittedBy,
+            rateSource,
+            sourceIp);
+
+
+
+      await _corridorRateRepository.AddAsync(newRate, ct);
+
+             await _rateApprovalRepository.AddAsync(new RateApprovalLog(
+            newRate.Id,
+            corridorCode,
+            "SUBMITTED",
+            currentActive?.CustomerRate ?? 0m,
+            customerRate,
+            reason:      null,
+            performedBy: submittedBy,
+            ipAddress:   sourceIp), ct);
+    await _auditService.AddAsync(new AuditLog(
+            entityType:   "CorridorRate",
+            entityId:     newRate.Id,
+            action:       "SUBMITTED",
+            beforeValue:  null,
+            afterValue:   null,
+            performedBy:  submittedBy,
+            ipAddress:    sourceIp,
+            deviceInfo:   null,
+            correlationId: null), ct);
+
+        return newRate.Id;
+}
+  public async Task ApproveRateSheetAsync(
+        Guid   rateId,
+        string approvedBy,
+        string reason,
+        CancellationToken ct = default)
+    {
+        var rate = await _corridorRateRepository.GetByIdAsync(rateId, ct) ?? throw new InvalidOperationException($"Rate {rateId} not found");
+        
+        if(rate.ApprovalStatus != RateApprovalStatus.PendingApproval)
+        {
+                       throw new InvalidOperationException(
+                $"Cannot approve rate in status {rate.ApprovalStatus}. Expected: PendingApproval.");
+        }
+
+    }
     
 }
+
+
+
+
+
+
+
+
+
+
 }
